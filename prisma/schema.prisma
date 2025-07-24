@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model CalendarEvent {
+  id            String  @id @default(cuid())
+  eventId       String  @unique @map("event_id")
+  summary       String?
+  description   String?
+  location      String?
+  startDateTime String? @map("start_datetime")
+  endDateTime   String? @map("end_datetime")
+  startDate     String? @map("start_date")
+  endDate       String? @map("end_date")
+  timezone      String?
+  status        String?
+  htmlLink      String? @map("html_link")
+  created       String
+  updated       String
+  deletedAt     String? @map("deleted_at")
+
+  @@map("calendar_events")
+}
+
+model FetchCache {
+  id        String   @id @default(cuid())
+  startTime String   @map("start_time")
+  endTime   String   @map("end_time")
+  createdAt String   @map("created_at")
+  
+  @@unique([startTime, endTime])
+  @@map("fetch_cache")
+}
+
+model WebhookSubscription {
+  id             String   @id @default(cuid())
+  subscriptionId String   @unique @map("subscription_id")
+  resourceId     String   @map("resource_id")
+  resourceUri    String   @map("resource_uri")
+  token          String
+  expiration     String
+  state          String
+  created        String   @map("created")
+  updated        String   @map("updated")
+
+  @@map("webhook_subscriptions")
+}
