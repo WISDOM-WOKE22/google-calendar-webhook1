@@ -26,7 +26,6 @@ A robust Node.js/TypeScript service for handling Google Calendar webhooks with r
 - [Architecture](#architecture)
 - [Error Handling](#error-handling)
 - [Development](#development)
-- [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
 
 ## 🔧 Prerequisites
@@ -320,13 +319,6 @@ The application uses a comprehensive error handling system:
     "path": "/api/calendar/events"
   }
 }
-```
-
-
-
-## 🚀 Deployment
-
-### Production Deployment
 
 #### Environment Variables for Production
 ```env
