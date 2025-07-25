@@ -4,12 +4,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createWebhookSubscription = exports.pushWebhookNotification = exports.getEvents = void 0;
+const dotenv_1 = __importDefault(require("dotenv"));
 const config_1 = __importDefault(require("../config"));
 const logger_1 = __importDefault(require("../utils/logger"));
 const calendarService_1 = __importDefault(require("../services/calendarService"));
 const googleCalendar_1 = __importDefault(require("../services/googleCalendar"));
 const error_1 = require("../services/error");
 const response_1 = require("../services/response");
+dotenv_1.default.config();
 // Protect this route
 exports.getEvents = (0, error_1.asyncHandler)(async (req, res) => {
     try {
@@ -17,7 +19,7 @@ exports.getEvents = (0, error_1.asyncHandler)(async (req, res) => {
         const { startTime, endTime } = req.query;
         // Validate required query parameters
         (0, error_1.validateRequiredFields)({ startTime, endTime }, ['startTime', 'endTime']);
-        const accessToken = req.headers.authorization?.replace('Bearer ', '');
+        const accessToken = req.headers.authorization?.replace('Bearer ', '').trim();
         if (!accessToken) {
             return res.status(401).json({
                 success: false,
@@ -25,38 +27,19 @@ exports.getEvents = (0, error_1.asyncHandler)(async (req, res) => {
                 message: 'Include Authorization: Bearer <token> header',
             });
         }
-        // Set the access token for Google Calendar service
-        googleCalendar_1.default.setAccessToken(accessToken);
         // Validate date range
         (0, error_1.validateDateRange)(startTime, endTime);
-        const request = {
-            startTime: startTime,
-            endTime: endTime,
-        };
-        const response = await calendarService_1.default.fetchEvents(request);
-        if (!response.success) {
-            let errorMessage = 'Unknown error';
-            if (response.message) {
-                if (response.message.includes('No access, refresh token, API key or refresh handler callback is set')) {
-                    errorMessage =
-                        'Authentication required. Please provide a valid access token.';
-                }
-                else if (response.message.includes('invalid_grant')) {
-                    errorMessage = 'Access token has expired. Please re-authenticate.';
-                }
-                else if (response.message.includes('access_denied')) {
-                    errorMessage =
-                        'Access denied. Please check your Google Calendar permissions.';
-                }
-                else {
-                    errorMessage = response.message;
-                }
-            }
-            throw new error_1.ValidationError(errorMessage || 'Failed to fetch events');
+        // Set access token for the service
+        googleCalendar_1.default.setAccessToken(accessToken);
+        // Fetch events using the service
+        const result = await googleCalendar_1.default.getEvents(startTime, endTime);
+        if (!result.success) {
+            throw new error_1.ValidationError(result.error || 'Failed to fetch events');
         }
-        res.json((0, response_1.formatSuccessResponse)(response.data, response.message, {
-            cached: response.cached,
-            count: response.data.length,
+        const events = result.data || [];
+        res.json((0, response_1.formatSuccessResponse)(events, 'Fetched events successfully', {
+            cached: false,
+            count: events.length,
         }));
     }
     catch (err) {
@@ -96,8 +79,7 @@ exports.pushWebhookNotification = (0, error_1.asyncHandler)(async (req, res) => 
     }
     res.json((0, response_1.formatSuccessResponse)(null, response.message));
 });
-// Protect the route
-// Create a new webhook subscription
+// Create a new webhook subscription using the google calendar service
 exports.createWebhookSubscription = (0, error_1.asyncHandler)(async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -117,19 +99,30 @@ exports.createWebhookSubscription = (0, error_1.asyncHandler)(async (req, res) =
             });
         }
         logger_1.default.info(`Received access token for webhook subscription: ${accessToken}`);
-        // Pass the accessToken to the service so it can be used for authentication
-        const response = await googleCalendar_1.default.createWebhookSubscription(accessToken);
-        if (!response.success) {
-            throw new error_1.ValidationError(response.error || 'Failed to create webhook subscription');
+        // Set access token for the service
+        googleCalendar_1.default.setAccessToken(accessToken);
+        // Use the service to create a webhook subscription
+        const result = await googleCalendar_1.default.createWebhookSubscription('primary');
+        if (!result.success) {
+            throw new error_1.ValidationError(result.error || 'Failed to create webhook subscription');
         }
-        res.json((0, response_1.formatSuccessResponse)(response.data, 'Webhook subscription created successfully'));
+        const { id: channelId, resourceId, expiration, kind } = result.data || {};
+        res.json((0, response_1.formatSuccessResponse)({
+            channelId,
+            resourceId,
+            expiration,
+            kind,
+        }, 'Webhook subscription created successfully'));
     }
     catch (err) {
         let errorMessage = 'Unknown error';
         if (err instanceof error_1.ValidationError) {
             throw err;
         }
-        if (err instanceof Error) {
+        if (err.response?.data?.error?.message) {
+            errorMessage = err.response.data.error.message;
+        }
+        else if (err instanceof Error) {
             if (err.message.includes('No access, refresh token, API key or refresh handler callback is set')) {
                 errorMessage =
                     'Authentication required. Please provide a valid access token.';
@@ -145,6 +138,7 @@ exports.createWebhookSubscription = (0, error_1.asyncHandler)(async (req, res) =
                 errorMessage = err.message;
             }
         }
+        logger_1.default.error('Error creating webhook subscription:', errorMessage);
         throw new error_1.ValidationError(errorMessage);
     }
 });

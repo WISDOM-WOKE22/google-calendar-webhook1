@@ -26,7 +26,6 @@ A robust Node.js/TypeScript service for handling Google Calendar webhooks with r
 - [Architecture](#architecture)
 - [Error Handling](#error-handling)
 - [Development](#development)
-- [Testing](#testing)
 - [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
 
@@ -323,23 +322,13 @@ The application uses a comprehensive error handling system:
 }
 ```
 
-## 🧪 Testing
 
-### Run Tests
-```bash
-npm test
-```
-
-### Test Coverage
-The project includes comprehensive tests for:
-- Error handling scenarios
-- API endpoint responses
-- Webhook processing
-- Database operations
 
 ## 🚀 Deployment
 
-### Environment Variables for Production
+### Production Deployment
+
+#### Environment Variables for Production
 ```env
 NODE_ENV=production
 PORT=3000
@@ -349,25 +338,19 @@ GOOGLE_CLIENT_SECRET=your_production_client_secret
 GOOGLE_REDIRECT_URI=https://yourdomain.com/api/auth/google/callback
 WEBHOOK_BASE_URL=https://yourdomain.com
 WEBHOOK_SECRET=your_production_webhook_secret
-```
-
-### Docker Deployment
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY dist ./dist
-EXPOSE 3000
-CMD ["node", "dist/index.js"]
+LOG_LEVEL=info
 ```
 
 ### Production Considerations
-- Use HTTPS for webhook endpoints
-- Set up proper logging and monitoring
-- Configure database backups
-- Set up webhook subscription renewal monitoring
-- Use environment-specific Google OAuth credentials
+
+- **HTTPS**: Use HTTPS for webhook endpoints in production
+- **Reverse Proxy**: Use nginx or similar for SSL termination
+- **Monitoring**: Set up health checks and monitoring
+- **Logging**: Configure log rotation and external logging services
+- **Database**: Consider using PostgreSQL for production instead of SQLite
+- **Backups**: Set up automated database backups
+- **Security**: Use strong webhook secrets and rotate them regularly
+- **Process Management**: Use PM2 or similar for process management
 
 ## 🔍 Troubleshooting
 
@@ -408,27 +391,3 @@ Enable debug logging by setting:
 ```env
 LOG_LEVEL=debug
 ```
-
-## 📄 License
-
-This project is licensed under the ISC License.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## 📞 Support
-
-For support and questions:
-- Create an issue in the repository
-- Check the troubleshooting section
-- Review the API documentation
-
----
-
-**Note**: This service is designed for technical interview purposes and demonstrates best practices for building a production-ready webhook service with Google Calendar integration. 
