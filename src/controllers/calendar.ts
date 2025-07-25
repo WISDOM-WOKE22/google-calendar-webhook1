@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { FetchRequest } from '../types';
+import dotenv from 'dotenv';
 import config from '../config';
 import logger from '../utils/logger';
 import calendarService from '../services/calendarService';
@@ -13,6 +13,8 @@ import {
 } from '../services/error';
 import { formatSuccessResponse } from '../services/response';
 
+dotenv.config();
+
 // Protect this route
 export const getEvents = asyncHandler(async (req: Request, res: Response) => {
   try {
@@ -22,7 +24,7 @@ export const getEvents = asyncHandler(async (req: Request, res: Response) => {
     // Validate required query parameters
     validateRequiredFields({ startTime, endTime }, ['startTime', 'endTime']);
 
-    const accessToken = req.headers.authorization?.replace('Bearer ', '');
+    const accessToken = req.headers.authorization?.replace('Bearer ', '').trim();
 
     if (!accessToken) {
       return res.status(401).json({
@@ -32,48 +34,31 @@ export const getEvents = asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // Set the access token for Google Calendar service
-    googleCalendarService.setAccessToken(accessToken);
-
     // Validate date range
     validateDateRange(startTime as string, endTime as string);
 
-    const request: FetchRequest = {
-      startTime: startTime as string,
-      endTime: endTime as string,
-    };
+    // Set access token for the service
+    googleCalendarService.setAccessToken(accessToken);
 
-    const response = await calendarService.fetchEvents(request);
+    // Fetch events using the service
+    const result = await googleCalendarService.getEvents(
+      startTime as string,
+      endTime as string,
+    );
 
-    if (!response.success) {
-      let errorMessage = 'Unknown error';
-      if (response.message) {
-        if (
-          response.message.includes(
-            'No access, refresh token, API key or refresh handler callback is set',
-          )
-        ) {
-          errorMessage =
-            'Authentication required. Please provide a valid access token.';
-        } else if (response.message.includes('invalid_grant')) {
-          errorMessage = 'Access token has expired. Please re-authenticate.';
-        } else if (response.message.includes('access_denied')) {
-          errorMessage =
-            'Access denied. Please check your Google Calendar permissions.';
-        } else {
-          errorMessage = response.message;
-        }
-      }
-      throw new ValidationError(errorMessage || 'Failed to fetch events');
+    if (!result.success) {
+      throw new ValidationError(result.error || 'Failed to fetch events');
     }
 
+    const events = result.data || [];
+
     res.json(
-      formatSuccessResponse(response.data, response.message, {
-        cached: response.cached,
-        count: response.data.length,
+      formatSuccessResponse(events, 'Fetched events successfully', {
+        cached: false,
+        count: events.length,
       }),
     );
-  } catch (err) {
+  } catch (err: any) {
     let errorMessage = 'Unknown error';
     if (err instanceof ValidationError) {
       throw err;
@@ -124,8 +109,7 @@ export const pushWebhookNotification = asyncHandler(
   },
 );
 
-// Protect the route
-// Create a new webhook subscription
+// Create a new webhook subscription using the google calendar service
 export const createWebhookSubscription = asyncHandler(
   async (req: Request, res: Response) => {
     try {
@@ -151,28 +135,37 @@ export const createWebhookSubscription = asyncHandler(
         `Received access token for webhook subscription: ${accessToken}`,
       );
 
-      // Pass the accessToken to the service so it can be used for authentication
-      const response =
-        await googleCalendarService.createWebhookSubscription(accessToken);
+      // Set access token for the service
+      googleCalendarService.setAccessToken(accessToken);
 
-      if (!response.success) {
-        throw new ValidationError(
-          response.error || 'Failed to create webhook subscription',
-        );
+      // Use the service to create a webhook subscription
+      const result = await googleCalendarService.createWebhookSubscription('primary');
+
+      if (!result.success) {
+        throw new ValidationError(result.error || 'Failed to create webhook subscription');
       }
+
+      const { id: channelId, resourceId, expiration, kind } = result.data || {};
 
       res.json(
         formatSuccessResponse(
-          response.data,
+          {
+            channelId,
+            resourceId,
+            expiration,
+            kind,
+          },
           'Webhook subscription created successfully',
         ),
       );
-    } catch (err) {
+    } catch (err: any) {
       let errorMessage = 'Unknown error';
       if (err instanceof ValidationError) {
         throw err;
       }
-      if (err instanceof Error) {
+      if (err.response?.data?.error?.message) {
+        errorMessage = err.response.data.error.message;
+      } else if (err instanceof Error) {
         if (
           err.message.includes(
             'No access, refresh token, API key or refresh handler callback is set',
@@ -189,6 +182,7 @@ export const createWebhookSubscription = asyncHandler(
           errorMessage = err.message;
         }
       }
+      logger.error('Error creating webhook subscription:', errorMessage);
       throw new ValidationError(errorMessage);
     }
   },
